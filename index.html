@@ -1,0 +1,2691 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <meta charset="UTF-8" />
+  <title>Cesium – Building Floors + GeoJSON + Booking + Navigation</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <style>
+    html,
+    body,
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 14px;
+      width: 240px;
+      border-radius: 10px;
+      box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
+      z-index: 999;
+    }
+
+
+    /* -------------- MODERN NAV PANEL (Cinema–ATM Style) ---------------- */
+
+.nav-container {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 360px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    font-family: "Inter", sans-serif;
+    z-index: 9999;
+    overflow: hidden;
+}
+
+/* Header card */
+.nav-top-card {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid #eee;
+    gap: 14px;
+}
+
+.nav-location {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 45%;
+}
+
+.loc-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.loc-icon.red { background: #ff6363; }
+.loc-icon.blue { background: #1a3ea8; }
+
+.loc-title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.loc-sub {
+    color: #6e6e6e;
+    font-size: 12px;
+}
+
+.nav-swap {
+    font-size: 24px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Dropdown Section */
+.nav-dropdowns {
+    padding: 16px;
+}
+
+.nav-btn {
+    background: #1a3ea8;
+    color: #fff;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    margin-top: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.nav-summary {
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #333;
+}
+
+/* Steps scroll */
+.nav-steps {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 16px;
+    padding-left: 26px;
+    position: relative;
+}
+
+/* Timeline vertical dotted line */
+.nav-steps::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-left: 2px dashed #aaa;
+}
+
+/* Single step */
+.nav-step {
+    display: flex;
+    margin-bottom: 20px;
+}
+
+.step-icon {
+    margin-right: 12px;
+    font-size: 20px;
+}
+
+.step-details {
+    flex: 1;
+}
+
+.step-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.step-box {
+    background: #1a3ea8;
+    color: #fff;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+
+
+
+    .btn {
+      width: 100%;
+      padding: 8px;
+      margin: 6px 0;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    #bookingPanel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 260px;
+      background: white;
+      padding: 14px;
+      border-radius: 10px;
+      box-shadow: 0 0 14px rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 999;
+    }
+
+
+
+    #authPanel {
+  position: absolute;
+  left: 12px;
+  top: 300px;  /* 👈 aligns exactly in the empty space */
+  width: 200px;
+  background: rgb(248, 248, 248);
+  padding: 12px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  text-align: center;
+}
+
+#authPanel button {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+#authPanel button:hover {
+  background: #f5f5f5;
+}
+
+
+    select,
+    button {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="cesiumContainer"></div>
+  <div class="panel">
+    <h3 style="text-align:center;margin:0;">Floor Controls</h3>
+    <button class="btn" onclick="showFloor(1)">Show Ground Floor</button>
+    <button class="btn" onclick="showFloor(2)">Show 1st Floor</button>
+    <button class="btn" onclick="showFloor(3)">Show 2nd Floor</button>
+    <button class="btn" onclick="showFloor(4)">Show 3rd Floor</button>
+    <button class="btn" onclick="showFloor(0)">Show ALL Floors</button>
+  </div>
+
+<div id="authPanel">
+  <button id="googleSignInBtn">Sign in with Google</button>
+</div>
+
+
+  <div id="bookingPanel">
+    <h3 id="roomTitle" style="margin:0 0 10px 0; text-align:center;"></h3>
+    <p><b>Status:</b> <span id="roomStatus">Unknown</span></p>
+
+    <button id="bookBtn" class="btn" style="background:#4caf50; color:white;">Book Room</button>
+    <button id="cancelBtn" class="btn" style="background:#e53935; color:white;">Cancel Booking</button>
+  </div>
+  <div id="roomDetailsCard" style="
+  position:absolute;
+  top:65px;
+  right:4px;
+  width:320px;
+  max-height:85vh;
+  overflow-y:auto;
+  background:white;
+  padding:14px;
+  border-radius:12px;
+  box-shadow:0 0 14px rgba(0,0,0,0.3);
+  z-index:999;
+  display:none;
+">
+    <h3 id="cardRoomName" style="margin-top:0; text-align:center;"></h3>
+    <div id="cardContent"></div>
+  </div>
+  <div id="navPanel" class="nav-container">
+
+  <!-- Header -->
+  <div class="nav-top-card">
+      <div class="nav-location">
+          <div class="loc-icon red"></div>
+          <div class="loc-text">
+              <div id="fromNameDisplay" class="loc-title">From</div>
+              <div class="loc-sub">Floor</div>
+          </div>
+      </div>
+
+      <div class="nav-swap">⇅</div>
+
+      <div class="nav-location">
+          <div class="loc-icon blue"></div>
+          <div class="loc-text">
+              <div id="toNameDisplay" class="loc-title">To</div>
+              <div class="loc-sub">Floor</div>
+          </div>
+      </div>
+  </div>
+
+  <!-- Dropdowns -->
+  <div class="nav-dropdowns">
+      <label>From</label>
+      <select id="fromRoom"></select>
+
+      <label>To</label>
+      <select id="toRoom"></select>
+
+      <button class="nav-btn" onclick="startNavigation()">Start Navigation</button>
+  </div>
+
+  <div id="navSummary" class="nav-summary"></div>
+
+  <!-- Steps Scroll List -->
+  <div id="navSteps" class="nav-steps"></div>
+
+</div>
+
+
+
+
+  <script>
+    Cesium.Ion.defaultAccessToken =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4MDk1YzJiNi1jM2FhLTQ1YTMtYWFjNi0wNmE2MWU1MTQwMGYiLCJpZCI6Mjg2NjEzLCJpYXQiOjE3NjQ2NzY4MzR9.E9tYYjcSnNQpVCY3KgPNoN5MRvan3hcnJMJ9TDPRQxs";
+
+
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+      terrainProvider: undefined,
+      baseLayerPicker: true,  // Allow base layer picker for switching layers
+      shadows: true,
+      shouldAnimate: true,
+      infoBox: false,
+      selectionIndicator: false
+    });
+
+    // =====================
+// 🌞 LIGHTING FIX FOR STACKED FLOORS
+// =====================
+
+// Enable lighting & shadows
+viewer.scene.globe.enableLighting = false;
+viewer.shadows = false;
+viewer.terrainShadows = Cesium.ShadowMode.DISABLED;
+
+
+// Set realistic but angled sun (NOT top-down)
+//viewer.scene.light = new Cesium.SunLight();
+
+// Mid-day but slightly angled sun (prevents dark floors)
+viewer.clock.currentTime = Cesium.JulianDate.fromDate(
+  new Date(new Date().setHours(10, 30, 0))
+);
+
+// Soft ambient light to brighten interiors
+viewer.scene.ambientLightColor = new Cesium.Color(
+  0.45,  // R
+  0.45,  // G
+  0.45,  // B
+  1.0
+);
+
+// Reduce shadow harshness
+viewer.scene.shadowMap.darkness = 0.35;
+viewer.scene.shadowMap.softShadows = true;
+
+    // Set time to noon for best indoor lighting
+viewer.clock.currentTime = Cesium.JulianDate.fromDate(
+  new Date(new Date().setHours(12, 0, 0))
+);
+
+viewer.clock.shouldAnimate = true;
+
+    const BOOKABLE_ROOMS = new Set([
+      "dojo",
+      "eureka",
+      "manthan",
+      "meeting room",
+      "conference room",
+    ]);
+
+
+    function loadCalendarData() {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0); // today 00:00:00
+
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999); // today 23:59:59
+
+      gapi.client.calendar.events.list({
+        // calendarId: "primary",
+        timeMin: startOfDay.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        maxResults: 100,
+        singleEvents: true,
+        orderBy: "startTime"
+      }).then(res => {
+        const events = res.result.items || [];
+        // events.forEach((event, idx) => {
+        //   console.log(`Event ${idx + 1}: ${event.summary} at ${event.location}`);
+        // });
+
+        // ✅ DISPLAY FORMATTED BOOKING DATA
+        const bookingMap = buildRoomBookingMap(events);
+        events.forEach(event => {
+          const roomName = extractRoomName(event.location);
+        });
+
+        updateRoomAvailability(events);
+
+        // ✅ DISPLAY ALL EVENTS IN CARD
+        displayAllEventsInCard(events);
+      }).catch(err => {
+        console.error("Calendar error:", err);
+      });
+    }
+
+function makeCircleIcon(text, bg = "#0B57D0", fg = "#ffffff") {
+  const size = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+
+  // circle
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
+  ctx.fillStyle = bg;
+  ctx.fill();
+
+  // subtle border
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.stroke();
+
+  // text (1–2 letters)
+  const t = (text || "?").trim().toUpperCase().slice(0, 2);
+  ctx.fillStyle = fg;
+  ctx.font = "bold 56px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(t, size / 2, size / 2 + 2);
+
+  return c.toDataURL("image/png");
+}
+
+    // Display all events from calendar in the card
+    function displayAllEventsInCard(events) {
+      const card = document.getElementById("roomDetailsCard");
+      const cardContent = document.getElementById("cardContent");
+
+      if (!card || !cardContent) return;
+
+      const now = new Date();
+
+      // ✅ keep only present + future events
+      const filteredEvents = events
+        .filter(event => {
+          const end = new Date(event.end.dateTime || event.end.date);
+          return end >= now;
+        })
+        .sort((a, b) => {
+          const aStart = new Date(a.start.dateTime || a.start.date);
+          const bStart = new Date(b.start.dateTime || b.start.date);
+          return aStart - bStart;
+        });
+
+      if (filteredEvents.length === 0) {
+        cardContent.innerHTML = "<p>No ongoing or upcoming meetings.</p>";
+        card.style.display = "block";
+        return;
+      }
+
+      let html = "";
+
+      filteredEvents.forEach((event, index) => {
+        const roomName = getRoomNameFromEvent(event) || "Unknown Room";
+
+        const bookedBy =
+          event.organizer?.email?.split("@")[0] ||
+          event.creator?.email?.split("@")[0] ||
+          "Unknown";
+
+        const startTime = new Date(
+          event.start.dateTime || event.start.date
+        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        const endTime = new Date(
+          event.end.dateTime || event.end.date
+        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        html += `
+      <div style="
+        background:#f5f5f5;
+        padding:10px;
+        margin-bottom:10px;
+        border-radius:6px;
+        border-left:3px solid #0B57D0;
+      ">
+        <b>${roomName}</b><br/>
+        <b>Meeting:</b> ${event.summary || "-"}<br/>
+        <b>By:</b> ${bookedBy}<br/>
+        <b>Time:</b> ${startTime} - ${endTime}
+      </div>
+    `;
+      });
+
+      cardContent.innerHTML = html;
+      card.style.display = "block";
+    }
+
+    async function getRoomCalendarIds() {
+      const res = await gapi.client.calendar.calendarList.list();
+
+      return res.result.items
+        .filter(c => c.id.includes("@resource.calendar.google.com"))
+        .map(c => ({
+          id: c.id,
+          name: c.summary
+        }));
+    }
+    function fetchRoomEvents(roomCalendarId) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      return gapi.client.calendar.events.list({
+        calendarId: roomCalendarId,
+        timeMin: startOfDay.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime"
+      });
+    }
+
+    function extractRoomName(location) {
+      if (!location) return null;
+
+      // Example: "...-Level II-Manthan (Conference Room) (8)"
+      const parts = location.split("-");
+      const lastPart = parts[parts.length - 1];
+      const roomName = lastPart.split("(")[0].trim();
+
+
+      return roomName; // "Manthan"
+    }
+
+    function buildRoomBookingMap(events) {
+      const map = {};
+
+      events.forEach(event => {
+        const rawRoomName = getRoomNameFromEvent(event);
+        const roomName = normalizeRoomName(rawRoomName);
+        if (!roomName) return;
+
+        const booking = {
+          bookedBy: event.organizer?.email || event.creator?.email,
+          start: new Date(event.start.dateTime),
+          end: new Date(event.end.dateTime),
+          startTime: new Date(event.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          endTime: new Date(event.end.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title: event.summary
+        };
+
+        // Store as array to handle multiple bookings per room
+        if (!map[roomName]) {
+          map[roomName] = [];
+        }
+        map[roomName].push(booking);
+      });
+
+      return map;
+    }
+    function createTooltipHTML(roomName, bookings) {
+      if (!bookings || bookings.length === 0) {
+        return `
+      <b>${roomName}</b><br/>
+      Status: <span style="color:green">Available</span>
+    `;
+      }
+
+      // Handle both single booking and array of bookings
+      const bookingArray = Array.isArray(bookings) ? bookings : [bookings];
+
+      let html = `<b>${roomName}</b><br/><hr style="margin:4px 0; border:none; border-top:1px solid #ddd;">`;
+
+      bookingArray.forEach((booking, index) => {
+        html += `
+      <div style="margin-bottom:8px;">
+        <b>Meeting ${index + 1}:</b> ${booking.title}<br/>
+        <b>By:</b> ${booking.bookedBy.split('@')[0]}<br/>
+        <b>Time:</b> ${booking.startTime} – ${booking.endTime}
+      </div>
+    `;
+      });
+
+      return html;
+    }
+
+
+    const CLIENT_ID = "176121964022-902gtv6hmatgdp3r0p3aemk2issnh4n7.apps.googleusercontent.com";
+    const API_KEY = "AIzaSyAzk377X6IT6a9Ss05gRIzp__HZB9p9Htc";
+    const SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
+
+    let tokenClient;
+    let accessToken = null;
+
+    function initGoogleAuth() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: (tokenResponse) => {
+          accessToken = tokenResponse.access_token;
+          gapi.client.setToken({ access_token: accessToken });
+          loadAllRoomCalendarData();
+        }
+      });
+    }
+
+    function signInWithGoogle() {
+      tokenClient.requestAccessToken();
+    }
+
+    function getRoomNameFromEvent(event) {
+  if (!event.attendees) return null;
+
+  const roomAttendee = event.attendees.find(a => a.resource);
+  if (!roomAttendee?.displayName) return null;
+
+  const name = roomAttendee.displayName.toLowerCase();
+
+  if (name.includes("dojo")) return "Dojo";
+  if (name.includes("eureka")) return "Eureka";
+  if (name.includes("manthan")) return "Manthan";
+  if (name.includes("meeting room")) return "Meeting Room";
+  if (name.includes("conference room")) return "Conference Room";
+
+  return null;
+}
+
+    function loadGapi() {
+      gapi.load("client", async () => {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          discoveryDocs: [
+            "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"
+          ]
+        });
+      });
+    }
+
+    window.onload = () => {
+  loadGapi();
+  initGoogleAuth();
+
+  const signInBtn = document.getElementById("googleSignInBtn");
+  if (signInBtn) {
+    signInBtn.addEventListener("click", signInWithGoogle);
+  }
+};
+
+    async function loadAllRoomCalendarData() {
+      const rooms = await getRoomCalendarIds();
+
+      if (!rooms.length) {
+        console.warn("No room calendars accessible");
+        return;
+      }
+
+      const results = await Promise.all(
+        rooms.map(r => fetchRoomEvents(r.id))
+      );
+
+      const allEvents = results.flatMap(r => r.result.items);
+
+      console.log("ALL ROOM EVENTS:", allEvents);
+
+      updateRoomAvailability(allEvents);
+      displayAllEventsInCard(allEvents); // ✅ THIS WAS MISSING
+    }
+ // Enable realistic sun lighting
+viewer.scene.globe.enableLighting = true;
+
+// Enable shadows properly
+viewer.shadows = false;
+viewer.terrainShadows = Cesium.ShadowMode.DISABLED;
+
+
+// Soft ambient (NOT white)
+viewer.scene.light = new Cesium.SunLight();
+viewer.scene.ambientLightColor =
+  new Cesium.Color(0.35, 0.35, 0.35, 1.0);
+
+
+    // Optionally adjust ambient light to make shadowed areas brighter
+    viewer.scene.ambientLightColor = new Cesium.Color(0.65, 0.65, 0.65, 1.0);
+
+  // White ambient light
+
+    
+
+    // Create OSM layer
+    const osmLayer = new Cesium.UrlTemplateImageryProvider({
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      subdomains: ['a', 'b', 'c']  // OSM supports subdomains to distribute tiles across multiple servers
+    });
+
+    // Create Satellite Layer
+    const satelliteLayer = new Cesium.UrlTemplateImageryProvider({
+      url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"  // Satellite imagery URL
+    });
+
+    // Remove existing base layers (if any) and add default OSM layer
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(osmLayer);
+
+    // Base Layer Picker to switch between layers
+    viewer.baseLayerPicker.viewModel.imageryProviderViewModels = [
+      new Cesium.ProviderViewModel({
+        name: 'OpenStreetMap',
+        iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/0a/OpenStreetMap_logo.svg',
+        tooltip: 'OpenStreetMap',
+        creationFunction: () => osmLayer
+      }),
+      new Cesium.ProviderViewModel({
+        name: 'Satellite',
+        iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e3/Google_Maps_icon.svg',
+        tooltip: 'Satellite Imagery',
+        creationFunction: () => satelliteLayer
+      })
+    ];
+
+    // Enable animation
+    viewer.clock.shouldAnimate = true;
+    // Default playback speed
+    viewer.clock.multiplier = 0.1;
+
+    viewer.scene.skyBox.show = false;
+    viewer.scene.globe.show = true;
+
+    /* LOCATION & ALTITUDES */
+    const LONG = 77.13369474110053 + 0.0000053;
+    const LAT = 28.670948042901436 + 0.00001684;
+    const MODEL_SCALE = 25;
+
+    let yaw = 50, pitch = -139, roll = -90;
+    const BASE_ALT = 0.01;
+    const FLOOR_H = 3.6;
+    const STACK_COMPRESS = -0.6;
+    const ALT_GROUND = BASE_ALT + 0 * FLOOR_H + 0 * STACK_COMPRESS;
+    const ALT_1ST = BASE_ALT + 1 * FLOOR_H + 1 * STACK_COMPRESS;
+    const ALT_2ND = BASE_ALT + 2 * FLOOR_H + 2 * STACK_COMPRESS;
+    const ALT_3RD = BASE_ALT + 3 * FLOOR_H + 3 * STACK_COMPRESS;
+
+
+
+    /* MATRIX & MODEL LOADING (omitted for brevity, assume working) */
+    function computeMatrix(alt, zOffset = 0) {
+      const pos = Cesium.Cartesian3.fromDegrees(LONG, LAT, alt);
+      const enu = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+
+      const Rz = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(yaw));
+      const Rx = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(pitch));
+      const Ry = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(roll));
+
+      const rot = Cesium.Matrix3.multiply(
+        Rz, Cesium.Matrix3.multiply(Ry, Rx, new Cesium.Matrix3()), new Cesium.Matrix3()
+      );
+
+      // rotation matrix
+      const rot4 = Cesium.Matrix4.fromRotationTranslation(rot);
+
+      // ✅ apply vertical shift in the model's local UP (meters)
+      const shifted = Cesium.Matrix4.clone(rot4, new Cesium.Matrix4());
+      Cesium.Matrix4.multiplyByTranslation(
+        shifted,
+        new Cesium.Cartesian3(0, 0, zOffset),
+        shifted
+      );
+
+      const result = new Cesium.Matrix4();
+      Cesium.Matrix4.multiply(enu, shifted, result);
+      return result;
+    }
+
+
+
+    let modelGround, model1, model2, model3, modelFullBuilding;
+
+    async function loadModels() {
+// Full model
+      modelFullBuilding = await Cesium.Model.fromGltfAsync({
+  url: "full_building.glb",
+  modelMatrix: computeMatrix(BASE_ALT),
+  scale: MODEL_SCALE,
+  shadows: Cesium.ShadowMode.DISABLED
+});
+
+// ❌ initially hidden (we only show it on "ALL Floors")
+modelFullBuilding.show = false;
+
+
+      // Ground floor (model only)
+      modelGround = await Cesium.Model.fromGltfAsync({
+        url: "1st_floor.glb",
+        modelMatrix: computeMatrix(ALT_GROUND),
+        scale: MODEL_SCALE,
+        shadows: Cesium.ShadowMode.DISABLED
+      });
+
+      // 1st floor up (model only)
+      model1 = await Cesium.Model.fromGltfAsync({
+        url: "1st_floor_up.glb",
+        modelMatrix: computeMatrix(ALT_1ST),
+        scale: MODEL_SCALE
+      });
+
+      // 2nd floor (office)
+      model2 = await Cesium.Model.fromGltfAsync({
+        url: "stairs_small.glb",
+        modelMatrix: computeMatrix(ALT_2ND),
+        scale: MODEL_SCALE,
+        shadows: Cesium.ShadowMode.DISABLED
+
+      });
+
+      // 3rd floor (office)
+      model3 = await Cesium.Model.fromGltfAsync({
+        url: "3rdfloor_small.glb",
+        modelMatrix: computeMatrix(ALT_3RD),
+        scale: MODEL_SCALE,
+        shadows: Cesium.ShadowMode.DISABLED
+      });
+
+      viewer.scene.primitives.add(modelFullBuilding);
+viewer.scene.primitives.add(modelGround);
+viewer.scene.primitives.add(model1);
+viewer.scene.primitives.add(model2);
+viewer.scene.primitives.add(model3);
+
+
+modelGround.allowPicking = true;
+model1.allowPicking = true;
+model2.allowPicking = true;
+model3.allowPicking = true;
+modelFullBuilding.allowPicking = true;
+
+
+    }
+    loadModels().then(() => {
+  showFloor(0); // 👈 SHOW FULL BUILDING ON START
+});
+
+
+
+
+
+    /* LOAD GEOJSON - Rooms only (omitted for brevity, assume working) */
+    let geo2 = null, geo3 = null;
+
+    const loadGeoFiles = Promise.all([
+      loadGeoJSON("2nd_floor_room1.geojson?v=" + Date.now(), ALT_2ND).then(ds => { geo2 = ds; }),
+      loadGeoJSON("3rd_floor_room1.geojson?v=" + Date.now(), ALT_3RD).then(ds => { geo3 = ds; }),
+    ]);
+
+    loadGeoFiles.then(() => {
+      // refreshRoomColors();
+      populateRoomDropdowns();
+    });
+
+    function normalizeRoomName(name) {
+      return name?.toLowerCase().trim();
+    }
+
+    function isPresentOrFutureEvent(event) {
+  // Cesium "now" in UTC
+  const nowJulian = viewer.clock.currentTime;
+
+  // Convert Google Calendar times → JulianDate (UTC-safe)
+  const startJulian = Cesium.JulianDate.fromDate(
+    new Date(event.start.dateTime || event.start.date)
+  );
+
+  const endJulian = Cesium.JulianDate.fromDate(
+    new Date(event.end.dateTime || event.end.date)
+  );
+
+  // ongoing OR future
+  return (
+    Cesium.JulianDate.greaterThanOrEquals(startJulian, nowJulian) ||
+    (
+      Cesium.JulianDate.lessThanOrEquals(startJulian, nowJulian) &&
+      Cesium.JulianDate.greaterThanOrEquals(endJulian, nowJulian)
+    )
+  );
+}
+
+function makeRoundIcon(pngPath, bgColor = "#1E3A8A") {
+  const size = 128;
+  const iconSize = 64;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  // background circle
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+  ctx.fillStyle = bgColor;
+  ctx.fill();
+
+  // white border
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+
+  // draw icon
+  const img = new Image();
+  img.src = pngPath;
+
+  return new Promise((resolve) => {
+    img.onload = () => {
+      ctx.drawImage(
+        img,
+        (size - iconSize) / 2,
+        (size - iconSize) / 2,
+        iconSize,
+        iconSize
+      );
+      resolve(canvas.toDataURL("image/png"));
+    };
+  });
+}
+
+
+    function loadGeoJSON(url, altitude) {
+      return Cesium.GeoJsonDataSource.load(url).then(ds => {
+        const GEO_OFFSET = -1.3;
+        const transform = computeMatrix(altitude + GEO_OFFSET);
+
+        ds.entities.values.forEach(e => {
+
+
+function getRoomIconByName(name) {
+  if (!name) return "icons/default.png";
+  const n = name.toLowerCase();
+
+  if (n.includes("conference")) return "icons/conference.png";
+  if (n.includes("meeting")) return "icons/meeting.png";
+  if (n.includes("men wash")) return "icons/men washroom.png";
+  if (n.includes("women wash")) return "icons/women washroom.png";
+  if (n.includes("pantry")) return "icons/pantry.png";
+  if (n.includes("stairs")) return "icons/stairs.png";
+
+  return "icons/default.png";
+}
+
+
+
+ // label height above the floor (meters)
+const LABEL_LIFT = 2.0;
+
+if (e.polygon) {
+
+  const pname =
+    e.properties.room_name?.getValue?.() ||
+    e.properties.name?.getValue?.() ||
+    "Room";
+
+  // Polygon styling
+  e.polygon.height = altitude;
+  e.polygon.extrudedHeight = altitude;
+  e.polygon.material = Cesium.Color.WHITE.withAlpha(0.05);
+  e.polygon.outline = true;
+e.polygon.outlineColor = Cesium.Color.BLACK.withAlpha(0.05);
+
+
+  // --- centroid --- 
+  const bs = Cesium.BoundingSphere.fromPoints(
+    e.polygon.hierarchy.getValue().positions
+  );
+
+  const carto = Cesium.Cartographic.fromCartesian(bs.center);
+
+  e.position = Cesium.Cartesian3.fromRadians(
+    carto.longitude,
+    carto.latitude,
+    altitude + LABEL_LIFT
+  );
+
+const iconPath = getRoomIconByName(pname);
+
+makeRoundIcon(iconPath).then((roundIcon) => {
+
+  // ROUND ICON
+  e.billboard = new Cesium.BillboardGraphics({
+    image: roundIcon,
+    scale: 0.22,
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY
+  });
+
+  // CLEAN LABEL BELOW
+  e.label = new Cesium.LabelGraphics({
+    text: pname,
+    font: "600 13px sans-serif",
+    fillColor: Cesium.Color.fromCssColorString("#1F2937"),
+    outlineWidth: 0,
+    showBackground: false,
+    verticalOrigin: Cesium.VerticalOrigin.TOP,
+    pixelOffset: new Cesium.Cartesian2(0, 6),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0.0, 800.0)
+  });
+
+});
+
+function roomColor(name) {
+  const n = name.toLowerCase();
+  if (n.includes("wash")) return "#059669";     // green
+  if (n.includes("meeting")) return "#2563EB"; // blue
+  if (n.includes("pantry")) return "#D97706";  // orange
+  if (n.includes("stairs")) return "#374151";  // gray
+  return "#1E3A8A";
+}
+
+
+  // --- LABEL ---
+  e.label = new Cesium.LabelGraphics({
+    text: pname,
+    font: "bold 13px sans-serif",
+    fillColor: Cesium.Color.BLACK,
+    showBackground: true,
+    backgroundColor: Cesium.Color.WHITE.withAlpha(0.95),
+    backgroundPadding: new Cesium.Cartesian2(8, 4),
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    pixelOffset: new Cesium.Cartesian2(0, -32),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0.0, 1000.0)
+  });
+
+  return; // ✅ stop further processing for polygon
+}
+
+
+
+
+          /* ✅ POLYGON ROOMS */
+          if (e.polygon) {
+            const name = (
+              e.properties.room_name?.getValue?.() ||
+              e.properties.name?.getValue?.() ||
+              "Room"
+
+              
+            );
+
+
+            
+            e.description = `<b>${name}</b><br/>Status: <span style="color:green">Available</span>`;
+          e.polygon.height = altitude;
+e.polygon.extrudedHeight = altitude + 0.15; // small thickness
+e.polygon.material = Cesium.Color.WHITE.withAlpha(0.25);
+e.polygon.outline = false;
+
+            e.polygon.outline = true;
+e.polygon.outlineColor = Cesium.Color.BLACK.withAlpha(0.4);
+
+
+            const bs = Cesium.BoundingSphere.fromPoints(
+              e.polygon.hierarchy.getValue().positions
+            );
+
+            // Convert centroid to lon/lat, then rebuild position at the FLOOR altitude
+            const carto = Cesium.Cartographic.fromCartesian(bs.center);
+
+            // label height above the floor (meters)
+            const LABEL_LIFT = 1.2;
+
+            e.position = Cesium.Cartesian3.fromRadians(
+              carto.longitude,
+              carto.latitude,
+              altitude + LABEL_LIFT
+            );
+
+
+// --- Icon (billboard) + clean label ---
+const icon = makeCircleIcon(pname, "#E53935"); // red circle icon
+
+e.billboard = new Cesium.BillboardGraphics({
+  image: icon,
+  scale: 0.22,
+  verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+  disableDepthTestDistance: Number.POSITIVE_INFINITY
+});
+
+// (optional) hide the old dot
+e.point = undefined;
+
+e.label = new Cesium.LabelGraphics({
+  text: pname,
+  font: "12px sans-serif",
+  fillColor: Cesium.Color.BLACK,
+  showBackground: true,
+  backgroundColor: Cesium.Color.WHITE.withAlpha(0.9),
+  backgroundPadding: new Cesium.Cartesian2(7, 4),
+  verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+  pixelOffset: new Cesium.Cartesian2(0, -30),
+  disableDepthTestDistance: Number.POSITIVE_INFINITY,
+  distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0.0, 180.0)
+});
+
+
+
+            return; // ✅ done for polygon
+          }
+
+
+          /* ✅ NAVIGATION POINTS (GeoJSON Point features) */
+          if (e.position) {
+
+            e.point = new Cesium.PointGraphics({
+              pixelSize: 40,                             // 🔥 BIGGER SIZE HERE
+              color: Cesium.Color.RED,
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 3,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            });
+
+            // OPTIONAL: add label if you want
+            const pname = (
+              e.properties.name?.getValue?.() ||
+              e.properties.point_name?.getValue?.() ||
+              "Point"
+            );
+
+            e.label = new Cesium.LabelGraphics({
+              text: pname,
+              font: "14px sans-serif",
+              fillColor: Cesium.Color.YELLOW,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              pixelOffset: new Cesium.Cartesian2(0, -18)
+            });
+          }
+
+        });
+
+
+        viewer.dataSources.add(ds);
+        return ds;
+
+        viewer.flyTo(dataSource, {
+          duration: 2
+        });
+
+      });
+    }
+
+
+function getModelCenter(model) {
+  if (!model || !model.boundingSphere) return null;
+  return model.boundingSphere.center;
+}
+
+function offsetFromCenter(center, upMeters) {
+  return Cesium.Cartesian3.add(
+    center,
+    new Cesium.Cartesian3(0, 0, upMeters),
+    new Cesium.Cartesian3()
+  );
+}
+
+    /* FLOOR TOGGLE, BOOKING, CLICK HANDLERS, CAMERA (omitted for brevity, assume working) */
+let selectedFloor = 0;
+let floorLock = false;
+
+let autoIndoorEnabled = true;
+
+function showFloor(f) {
+  selectedFloor = f;
+
+  // 🔥 If user selects any specific floor -> disable auto indoor/outdoor
+  if (f !== 0) {
+    autoIndoorEnabled = false;
+    mode = "INDOOR";         // lock indoor mode
+    indoorFloor = f;         // lock this floor
+  } else {
+    // 🔥 If user clicks ALL floors -> enable auto indoor/outdoor again
+    autoIndoorEnabled = true;
+    mode = "OUTDOOR";
+    indoorFloor = null;
+  }
+
+  if (modelFullBuilding) modelFullBuilding.show = (f === 0);
+
+  if (modelGround) modelGround.show = (f === 1);
+  if (model1)      model1.show      = (f === 2);
+  if (model2)      model2.show      = (f === 3);
+  if (model3)      model3.show      = (f === 4);
+
+  if (geo2) geo2.show = (f === 0 || f === 3);
+  if (geo3) geo3.show = (f === 0 || f === 4);
+}
+
+
+
+
+
+
+    
+    window.showFloor = showFloor;
+
+
+    const BOOKABLE_ROOM_IDS = new Set([14, 15, 18, 20, 22]);
+    let bookings = JSON.parse(localStorage.getItem("roomBookings") || "{}");
+
+    function saveBookings() {
+      localStorage.setItem("roomBookings", JSON.stringify(bookings));
+    }
+
+    // function refreshRoomColors() {
+    //   viewer.dataSources._dataSources.forEach(ds => {
+    //     ds.entities.values.forEach(e => {
+    //       if (!e.polygon) return;
+    //       const id = Number(e.properties.room_id?.getValue());
+    //       const name = e.properties.room_name?.getValue();
+
+    //       if (!BOOKABLE_ROOM_IDS.has(id)) {
+    //         e.polygon.material = Cesium.Color.TRANSPARENT;
+    //         e.polygon.outline = false;
+    //         return;
+    //       }
+
+    //       e.polygon.material = bookings[name]
+    //         ? Cesium.Color.RED.withAlpha(0.55)
+    //         : Cesium.Color.LIME.withAlpha(0.45);
+
+    //       e.polygon.outline = true;
+//e.polygon.outlineColor = Cesium.Color.BLACK.withAlpha(0.4);
+
+    //     });
+    //   });
+    // }
+
+    let selectedRoom = null;
+
+    viewer.screenSpaceEventHandler.setInputAction(click => {
+      const pick = viewer.scene.pick(click.position);
+      if (!pick || !pick.id || !pick.id.properties) return;
+
+      selectedRoom = pick.id;
+
+      const name = pick.id.properties.room_name.getValue();
+      const id = Number(pick.id.properties.room_id.getValue());
+
+      if (!BOOKABLE_ROOM_IDS.has(id)) {
+        alert("❌ This room is NOT allowed for booking.");
+        return;
+      }
+
+      document.getElementById("roomTitle").innerText = name;
+      document.getElementById("roomStatus").innerText =
+        bookings[name] ? "BOOKED" : "AVAILABLE";
+
+      document.getElementById("bookBtn").style.display =
+        bookings[name] ? "none" : "block";
+
+      document.getElementById("cancelBtn").style.display =
+        bookings[name] ? "block" : "none";
+
+      document.getElementById("bookingPanel").style.display = "block";
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    document.getElementById("bookBtn").onclick = () => {
+      const name = selectedRoom.properties.room_name.getValue();
+      bookings[name] = true; saveBookings();
+      // refreshRoomColors();
+    };
+
+    document.getElementById("cancelBtn").onclick = () => {
+      const name = selectedRoom.properties.room_name.getValue();
+      delete bookings[name]; saveBookings();
+      //  refreshRoomColors();
+    };
+
+
+
+
+    /* ----------------------------------------------------------
+   SMART INDOOR/OUTDOOR (NO AUTO FLOOR SWITCHING)
+   ---------------------------------------------------------- */
+
+let mode = "OUTDOOR";        // OUTDOOR | INDOOR
+let indoorFloor = null;      // locked floor
+
+const ENTER_INDOOR = 12;     // tune (when indoor should open)
+const EXIT_OUTDOOR = 18;     // tune (when indoor should close)
+let lastSwitchTime = 0;
+
+viewer.camera.changed.addEventListener(() => {
+
+  // ✅ if auto indoor/outdoor disabled -> do nothing
+  if (!autoIndoorEnabled) return;
+
+  const height = viewer.camera.positionCartographic.height;
+
+  // small debounce to prevent flicker
+  const now = Date.now();
+  if (now - lastSwitchTime < 300) return;
+
+  // -------------------------
+  // OUTDOOR MODE
+  // -------------------------
+  if (height >= ENTER_INDOOR) {
+  // normal outdoor view
+  showFloor(0);
+  return;
+}
+
+
+// =====================================================
+// PROFESSIONAL FLOOR TRANSITION (Outdoor -> Window -> Indoor -> Top View)
+// =====================================================
+
+let isFloorTransitionRunning = false;
+
+const FLOOR_CAMERA_TARGETS = {
+  1: { // Ground floor
+    heading: Cesium.Math.toRadians(50),
+    pitch: Cesium.Math.toRadians(-25),
+    range: 35
+  },
+  2: { // 1st floor
+    heading: Cesium.Math.toRadians(50),
+    pitch: Cesium.Math.toRadians(-25),
+    range: 35
+  },
+  3: { // 2nd floor
+    heading: Cesium.Math.toRadians(50),
+    pitch: Cesium.Math.toRadians(-25),
+    range: 35
+  },
+  4: { // 3rd floor
+    heading: Cesium.Math.toRadians(50),
+    pitch: Cesium.Math.toRadians(-25),
+    range: 35
+  }
+};
+
+// Helper: camera flyTo with Promise
+function flyToAsync(options) {
+  return new Promise((resolve) => {
+    viewer.camera.flyTo({
+      ...options,
+      complete: resolve,
+      cancel: resolve
+    });
+  });
+}
+
+// Main transition
+async function openFloorProfessional(floorNumber) {
+  if (isFloorTransitionRunning) return;
+  isFloorTransitionRunning = true;
+
+  try {
+    // Disable auto indoor/outdoor while transition
+    autoIndoorEnabled = false;
+
+    // STEP 1: Always show full building first
+    showFloor(0);
+
+    // Wait small time so model visibility updates
+    await new Promise(r => setTimeout(r, 200));
+
+    // Center of building (use full building bounding sphere)
+    const buildingCenter =
+      (modelFullBuilding && modelFullBuilding.boundingSphere)
+        ? modelFullBuilding.boundingSphere.center
+        : Cesium.Cartesian3.fromDegrees(LONG, LAT, BASE_ALT);
+
+    // STEP 2: Smooth zoom to desired floor window (outside view)
+    const camCfg = FLOOR_CAMERA_TARGETS[floorNumber] || FLOOR_CAMERA_TARGETS[1];
+
+    await flyToAsync({
+      destination: buildingCenter,
+      orientation: {
+        heading: camCfg.heading,
+        pitch: camCfg.pitch,
+        roll: 0
+      },
+      duration: 2.8
+    });
+
+    // STEP 3: Switch to indoor model ONLY AFTER camera is stable
+    showFloor(floorNumber);
+
+    await new Promise(r => setTimeout(r, 250));
+
+    // STEP 4: Move to top-down view (indoor)
+    const floorModel =
+      floorNumber === 1 ? modelGround :
+      floorNumber === 2 ? model1 :
+      floorNumber === 3 ? model2 :
+      floorNumber === 4 ? model3 :
+      null;
+
+    const floorCenter =
+      (floorModel && floorModel.boundingSphere)
+        ? floorModel.boundingSphere.center
+        : buildingCenter;
+
+    // Use viewBoundingSphere for perfect top view
+    viewer.camera.viewBoundingSphere(
+      new Cesium.BoundingSphere(floorCenter, 12),
+      new Cesium.HeadingPitchRange(
+        Cesium.Math.toRadians(0),
+        Cesium.Math.toRadians(-90),
+        25
+      )
+    );
+
+    // Lock indoor mode
+    mode = "INDOOR";
+    indoorFloor = floorNumber;
+
+  } catch (err) {
+    console.error("Floor transition error:", err);
+  } finally {
+    isFloorTransitionRunning = false;
+  }
+}
+
+// when close enough → hide full building for detection
+if (modelFullBuilding) modelFullBuilding.show = false;
+
+// show all floors temporarily for picking
+if (modelGround) modelGround.show = true;
+if (model1) model1.show = true;
+if (model2) model2.show = true;
+if (model3) model3.show = true;
+
+const detected = detectFloorFromScreenCenter();
+
+if (detected) {
+  indoorFloor = detected;
+  mode = "INDOOR";
+  showFloor(indoorFloor);
+  lastSwitchTime = now;
+  return;
+}
+
+// fallback: show full building again
+showFloor(0);
+
+  
+
+
+  // -------------------------
+  // INDOOR MODE
+  // -------------------------
+  if (mode === "INDOOR") {
+    // lock floor, don't auto change
+    if (indoorFloor) showFloor(indoorFloor);
+
+    if (height > EXIT_OUTDOOR) {
+      mode = "OUTDOOR";
+      indoorFloor = null;
+      showFloor(0);
+
+      lastSwitchTime = now;
+    }
+  }
+});
+
+
+
+// Detect floor only once when entering indoor
+function detectFloorFromScreenCenter() {
+  const canvas = viewer.scene.canvas;
+  const center = new Cesium.Cartesian2(
+    canvas.clientWidth / 2,
+    canvas.clientHeight / 2
+  );
+
+  const picked = viewer.scene.pick(center);
+
+  if (!picked || !picked.primitive) return null;
+
+  const prim = picked.primitive;
+
+  if (prim === modelGround) return 1; // ground
+  if (prim === model1) return 2;      // 1st
+  if (prim === model2) return 3;      // 2nd
+  if (prim === model3) return 4;      // 3rd
+
+  return null;
+}
+
+
+
+
+
+
+
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(LONG, LAT, 200),
+      duration: 2
+    });
+
+
+    /* ============================================================
+        NAVIGATION LOGIC
+        ============================================================ */
+
+    // --- EMBEDDED DOOR GEOJSON DATA ---
+    const DOOR_2ND_GEOJSON_CONTENT = `{
+"type": "FeatureCollection",
+"name": "2nd_floor_door",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-15,
+"features": [
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Entrance", 
+  "Latitude": "28.67089482215200", "Longitude": "77.13369299801327" },
+  "geometry": { "type": "Point", "coordinates": [77.13369299801327, 28.67089482215200] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Admin",
+  "Latitude": "28.67089008887495", "Longitude": "77.13366861432342" },
+  "geometry": { "type": "Point", "coordinates": [77.13366861432342, 28.67089008887495] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Dojo",
+  "Latitude": "28.67092944681110", "Longitude": "77.13366540177487" },
+  "geometry": { "type": "Point", "coordinates": [77.13366540177487, 28.67092944681110] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Director",
+  "Latitude": "28.67095426028975", "Longitude": "77.13369628484955" },
+  "geometry": { "type": "Point", "coordinates": [77.13369628484955, 28.67095426028975] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Manthan",
+  "Latitude": "28.67094925880298", "Longitude": "77.13370522156849" },
+  "geometry": { "type": "Point", "coordinates": [77.13370522156849, 28.67094925880298] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Eureka",
+  "Latitude": "28.67098951671396", "Longitude": "77.13368649275453" },
+  "geometry": { "type": "Point", "coordinates": [77.13368649275453, 28.67098951671396] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "UG's Cabin",
+  "Latitude": "28.67100097148032", "Longitude": "77.13367439510367" },
+  "geometry": { "type": "Point", "coordinates": [77.13367439510367, 28.67100097148032] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "VG's Cabin",
+  "Latitude": "28.67096311881750", "Longitude": "77.13362981197865" },
+  "geometry": { "type": "Point", "coordinates": [77.13362981197865, 28.67096311881750] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Pantry",
+  "Latitude": "28.67098751501402", "Longitude": "77.13361505798458" },
+  "geometry": { "type": "Point", "coordinates": [77.13361505798458, 28.67098751501402] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Men Washroom",
+  "Latitude": "28.67099246271987", "Longitude": "77.13362298925544" },
+  "geometry": { "type": "Point", "coordinates": [77.13362298925544, 28.67099246271987] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Women Washroom",
+  "Latitude": "28.67101673869098", "Longitude": "77.13365455987549" },
+  "geometry": { "type": "Point", "coordinates": [77.13365455987549, 28.67101673869098] } },
+
+{ "type": "Feature", "properties": { "Floor": "2nd", "room_name": "Stairs",
+  "Latitude": "28.67091077457918", "Longitude": "77.13370304794939" },
+  "geometry": { "type": "Point", "coordinates": [77.13370304794939, 28.67091077457918] } }
+
+]
+}`;
+ //
+
+    const DOOR_3RD_GEOJSON_CONTENT = `{
+"type": "FeatureCollection",
+"name": "3rd_floor_door",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-15,
+"features": [
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Conference Room",
+  "Latitude": "28.67094988101015", "Longitude": "77.13363876416800" },
+  "geometry": { "type": "Point", "coordinates": [77.13363876416800, 28.67094988101015] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Women Washroom",
+  "Latitude": "28.67100052355134", "Longitude": "77.13362922745107" },
+  "geometry": { "type": "Point", "coordinates": [77.13362922745107, 28.67100052355134] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Men Washroom",
+  "Latitude": "28.67101546237399", "Longitude": "77.13365135034559" },
+  "geometry": { "type": "Point", "coordinates": [77.13365135034559, 28.67101546237399] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Meeting Room",
+  "Latitude": "28.67101321416699", "Longitude": "77.13366405005728" },
+  "geometry": { "type": "Point", "coordinates": [77.13366405005728, 28.67101321416699] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Pantry",
+  "Latitude": "28.67095703850098", "Longitude": "77.13371705946003" },
+  "geometry": { "type": "Point", "coordinates": [77.13371705946003, 28.67095703850098] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Pantry",
+  "Latitude": "28.67092052705272", "Longitude": "77.13372663090223" },
+  "geometry": { "type": "Point", "coordinates": [77.13372663090223, 28.67092052705272] } },
+
+{ "type": "Feature", "properties": { "Floor": "3rd", "room_name": "Entrance",
+  "Latitude": "28.67089868786110", "Longitude": "77.13369341274869" },
+  "geometry": { "type": "Point", "coordinates": [77.13369341274869, 28.67089868786110] } }
+
+]
+}`;
+ //
+
+
+ 
+    const doorPositions = new Map(); // Key: '2|Room Name' or '3|Room Name', Value: Cartesian3 position
+
+    // --- DEBUG HELPER: Clears temporary visualization entities ---
+    function clearDebugEntities() {
+      viewer.entities.removeById("debugDoorStart");
+      viewer.entities.removeById("debugDoorEnd");
+      viewer.entities.removeById("debugCorridorStart");
+      viewer.entities.removeById("debugCorridorEnd");
+      viewer.entities.removeById("navigationLineA");
+      viewer.entities.removeById("navigationLineB");
+      viewer.entities.removeById("stairsLine");
+    }
+
+    // =========================================================================
+    // 💡 FIXED: Updated to handle both Point and Polygon door geometries.
+    // =========================================================================
+    async function loadDoorGeoJSON(fileName, fileContent, floorAltitude, floor) {
+      try {
+        const json = JSON.parse(fileContent);
+
+        json.features.forEach(feature => {
+          const roomName = feature.properties.room_name;
+          const geometry = feature.geometry;
+
+          let lonDeg, latDeg;
+
+          if (geometry.type === "Point") {
+            // Handles the original Point data
+            [lonDeg, latDeg] = geometry.coordinates;
+          }
+          else if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+            // FIX: Calculates Centroid for Polygon door geometries
+            // Checks for coordinates[0][0] structure to handle potential nested arrays (MultiPolygon or complex Polygons)
+            const coordinates = (Array.isArray(geometry.coordinates[0]) && Array.isArray(geometry.coordinates[0][0]))
+              ? geometry.coordinates[0][0]
+              : geometry.coordinates[0];
+
+            let sumLon = 0, sumLat = 0;
+            coordinates.forEach(([lon, lat]) => {
+              sumLon += lon;
+              sumLat += lat;
+            });
+            lonDeg = sumLon / coordinates.length;
+            latDeg = sumLat / coordinates.length;
+
+          } else {
+            console.warn(`Skipping door feature in ${fileName}: Unsupported geometry type ${geometry.type}`);
+            return;
+          }
+
+          // Use Cesium.Cartesian3.fromDegrees with (Longitude, Latitude, Altitude)
+          const pos = Cesium.Cartesian3.fromDegrees(lonDeg, latDeg, floorAltitude + 0.1);
+
+          // Store the position using the combined key, e.g., "2|Entrance"
+          doorPositions.set(`${floor}|${roomName}`, pos);
+        });
+      } catch (e) {
+        console.error(`Error loading door GeoJSON file ${fileName}:`, e);
+      }
+    }
+
+
+    /* ---------- GET ROOM BY NAME & CENTROID (omitted for brevity, assume working) ---------- */
+    function getRoomEntity(floorDS, name) {
+      return floorDS.entities.values.find(
+        e => e.properties?.room_name?.getValue() === name
+      );
+    }
+
+    function getDoorPosition(roomName, floor) {
+      return doorPositions.get(`${floor}|${roomName}`);
+    }
+
+    function centroid(entity) {
+      const positions = entity.polygon.hierarchy.getValue().positions;
+      return Cesium.BoundingSphere.fromPoints(positions).center;
+    }
+
+
+    /* ===== CENTERLINE-BASED GRAPH BUILDING ===== */
+    // FLOOR-SPECIFIC: Each centerline graph matches its corridor polygon
+    // centerlineGraph2 = centerline points from 2nd_floor_corridor.geojson
+    // centerlineGraph3 = centerline points from 3rd_floor_corridor.geojson
+    // Both graphs stay on their respective floor altitudes (ALT_2ND, ALT_3RD)
+    let centerlineGraph2 = null;  // Floor 2 centerline (lies inside 2nd_floor_room1.geojson corridor)
+    let centerlineGraph3 = null;  // Floor 3 centerline (lies inside 3rd_floor_room1.geojson corridor)
+
+    // Load corridor centerline GeoJSON and build graph from points
+    async function loadCenterlineGeoJSON(url, altitude, floor) {
+      try {
+        const response = await fetch(url);
+        const geoJsonData = await response.json();
+
+        // Extract centerline points from features (keep lon/lat for possible alignment)
+        const centerlinePoints = [];
+        geoJsonData.features.forEach(feature => {
+          if (feature.geometry && feature.geometry.type === "Point") {
+            const [lon, lat] = feature.geometry.coordinates;
+            centerlinePoints.push({
+              lon: lon,
+              lat: lat,
+              id: feature.properties?.id,
+              roomName: feature.properties?.room_name
+            });
+          }
+        });
+        // Build graph from centerline points (nodes keep lon/lat and Cartesian pos)
+        return buildCenterlineGraph(centerlinePoints, altitude);
+      } catch (e) {
+        console.error(`Error loading centerline GeoJSON from ${url}:`, e);
+        return null;
+      }
+    }
+
+
+    
+    // Build graph connecting centerline points sequentially
+    function buildCenterlineGraph(centerlinePoints, altitude) {
+      if (centerlinePoints.length === 0) return [];
+
+      const graph = centerlinePoints.map((cp, idx) => ({
+        pos: Cesium.Cartesian3.fromDegrees(cp.lon, cp.lat, altitude + 0.1),
+        lon: cp.lon, lat: cp.lat,
+        id: cp.id || `node-${idx}`,
+        edges: []
+      }));
+
+      // CONNECTION 1: Sequential (Follows your hallway drawing)
+      for (let i = 0; i < graph.length - 1; i++) {
+        const dist = Cesium.Cartesian3.distance(graph[i].pos, graph[i + 1].pos);
+        // Only connect if points are close (prevents jumping between unrelated segments)
+        if (dist < 10.0) {
+          graph[i].edges.push({ node: graph[i + 1], w: dist });
+          graph[i + 1].edges.push({ node: graph[i], w: dist });
+        }
+      }
+
+
+      
+      // CONNECTION 2: Junctions (This creates the "shortcuts" for the purple line)
+      // If two hallways meet, this "welds" them together
+      for (let i = 0; i < graph.length; i++) {
+        for (let j = i + 1; j < graph.length; j++) {
+          const d = Cesium.Cartesian3.distance(graph[i].pos, graph[j].pos);
+          // If points are nearly identical (under 0.5 meters), they are an intersection
+          if (d < 0.5) {
+            graph[i].edges.push({ node: graph[j], w: d });
+            graph[j].edges.push({ node: graph[i], w: d });
+          }
+        }
+      }
+      return graph;
+    }
+    
+
+// 🔥 FIXED DOOR → CORRIDOR CONNECTION (chooses SMART path, not full corridor)
+function connectDoorsToCorridor(doorPositions, graph) {
+
+    const MAX_SECOND_LINK = 1.2; // keep very small!
+
+    doorPositions.forEach((doorPos) => {
+
+        // Find nearest corridor node
+        let nearest = null;
+        let bestDist = Infinity;
+
+        graph.forEach(node => {
+            const d = Cesium.Cartesian3.distance(node.pos, doorPos);
+            if (d < bestDist) {
+                bestDist = d;
+                nearest = node;
+            }
+        });
+
+        if (!nearest) return;
+
+        // Create door node
+        const doorNode = { pos: doorPos, edges: [] };
+
+        // Primary connection
+        doorNode.edges.push({ node: nearest, w: bestDist });
+        nearest.edges.push({ node: doorNode, w: bestDist });
+
+        // ONLY create 1 tiny secondary connection
+        graph.forEach(node => {
+            const d = Cesium.Cartesian3.distance(node.pos, doorPos);
+            if (node !== nearest && d < MAX_SECOND_LINK) {
+                doorNode.edges.push({ node, w: d });
+                node.edges.push({ node: doorNode, w: d });
+            }
+        });
+
+        graph.push(doorNode);
+    });
+}
+
+
+
+    
+    function alignCenterlineToCorridor(graph, corridorEntity, altitude) {
+      if (!graph || graph.length === 0 || !corridorEntity) return { deltaLon: 0, deltaLat: 0 };
+
+      function addShortcutEdges(graph) {
+    const MAX_SHORTCUT_DISTANCE = 4.0;  // meters (tune this)
+    const MAX_ANGLE_DEVIATION = 0.9;    // avoid crossing walls
+
+    for (let i = 0; i < graph.length; i++) {
+        for (let j = i + 1; j < graph.length; j++) {
+            const a = graph[i];
+            const b = graph[j];
+          
+        }
+    }
+}
+
+
+      // ... (Your existing centroid logic is fine) ...
+      const positions = corridorEntity.polygon.hierarchy.getValue().positions;
+      let sumLon = 0, sumLat = 0;
+      positions.forEach(p => {
+        const carto = Cesium.Cartographic.fromCartesian(p);
+        sumLon += Cesium.Math.toDegrees(carto.longitude);
+        sumLat += Cesium.Math.toDegrees(carto.latitude);
+      });
+      const polyCentLon = sumLon / positions.length;
+      const polyCentLat = sumLat / positions.length;
+
+      let sumCLLon = 0, sumCLLat = 0;
+      graph.forEach(n => { sumCLLon += n.lon; sumCLLat += n.lat; });
+      const clCentLon = sumCLLon / graph.length;
+      const clCentLat = sumCLLat / graph.length;
+
+      const deltaLon = polyCentLon - clCentLon;
+      const deltaLat = polyCentLat - clCentLat;
+
+      // Shift nodes and update Cartesian positions
+      graph.forEach(n => {
+        n.lon += deltaLon;
+        n.lat += deltaLat;
+        n.pos = Cesium.Cartesian3.fromDegrees(n.lon, n.lat, altitude + 0.1);
+      });
+
+      // IMPORTANT: Update weights for ALL connections
+      graph.forEach(node => {
+        node.edges.forEach(edge => {
+          edge.w = Cesium.Cartesian3.distance(node.pos, edge.node.pos);
+        });
+      });
+
+      return { deltaLon, deltaLat };
+    }
+
+    /* ---------- CLOSEST NODE & A* PATHFINDING (omitted for brevity, assume working) ---------- */
+    function nearest(graph, pos) {
+      let best = graph[0], dmin = Infinity;
+      graph.forEach(n => {
+        const d = Cesium.Cartesian3.distance(n.pos, pos);
+        if (d < dmin) { dmin = d; best = n; }
+      });
+      return best;
+    }
+
+    function findPath(graph, start, goal) {
+      const open = new Set([start]);
+      const came = new Map();
+      const g = new Map([[start, 0]]);
+      const f = new Map([[start, Cesium.Cartesian3.distance(start.pos, goal.pos)]]);
+
+      function lowest() {
+        let best = null, bestVal = Infinity;
+        for (let n of open) {
+          const v = f.get(n) ?? Infinity;
+          if (v < bestVal) { bestVal = v; best = n; }
+        }
+        return best;
+      }
+
+      while (open.size) {
+        const cur = lowest();
+        if (cur === goal) {
+          const path = [];
+          let n = cur;
+          while (n) { path.unshift(n.pos); n = came.get(n); }
+          return path;
+        }
+
+        open.delete(cur);
+
+        cur.edges.forEach(e => {
+          const n = e.node;
+          const gNew = g.get(cur) + e.w;
+          if (gNew < (g.get(n) ?? Infinity)) {
+            came.set(n, cur);
+            g.set(n, gNew);
+            f.set(n, gNew + Cesium.Cartesian3.distance(n.pos, goal.pos));
+            open.add(n);
+          }
+        });
+      }
+      return null;
+    }
+
+
+    // ===================== ROUTE STYLE (Google-like) =====================
+    const ROUTE_COLOR = Cesium.Color.fromCssColorString("#0B57D0"); // blue
+    const ROUTE_OUTLINE = Cesium.Color.WHITE;
+
+    // Simple SVG arrow icon (white)
+    const ROUTE_ARROW_SVG = `data:image/svg+xml;utf8,
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path fill="white" d="M32 6 L54 28 H40 V58 H24 V28 H10 Z"/>
+</svg>`;
+
+    function removeRouteEntitiesAndArrows() {
+      viewer.entities.removeById("navigationLineA");
+      viewer.entities.removeById("navigationLineB");
+      viewer.entities.removeById("stairsLine");
+
+      // remove arrow entities
+      const toRemove = [];
+      viewer.entities.values.forEach(e => {
+        if (!e.id) return;
+        if (e.id.startsWith("routeArrowA_") || e.id.startsWith("routeArrowB_") || e.id.startsWith("routeArrowS_")) {
+          toRemove.push(e.id);
+        }
+      });
+      toRemove.forEach(id => viewer.entities.removeById(id));
+    }
+
+    // Compute heading in ENU (radians) from p -> q
+    function headingENU(p, q) {
+      const enu = Cesium.Transforms.eastNorthUpToFixedFrame(p);
+      const inv = Cesium.Matrix4.inverse(enu, new Cesium.Matrix4());
+      const lp = Cesium.Matrix4.multiplyByPoint(inv, p, new Cesium.Cartesian3());
+      const lq = Cesium.Matrix4.multiplyByPoint(inv, q, new Cesium.Cartesian3());
+
+      const dx = lq.x - lp.x; // East
+      const dy = lq.y - lp.y; // North
+      return Math.atan2(dy, dx);
+    }
+
+    // Place arrow billboards along a path every `stepMeters`
+    function addRouteArrows(pathPositions, idPrefix, stepMeters = 6) {
+      if (!pathPositions || pathPositions.length < 2) return;
+
+      for (let i = 1; i < pathPositions.length; i++) {
+        const a = pathPositions[i - 1];
+        const b = pathPositions[i];
+        const segLen = Cesium.Cartesian3.distance(a, b);
+        if (segLen < 0.001) continue;
+
+        const head = headingENU(a, b);
+        const rot = head - Cesium.Math.PI_OVER_TWO; // SVG points up
+
+        const count = Math.max(1, Math.floor(segLen / stepMeters));
+        for (let k = 1; k <= count; k++) {
+          const t = k / (count + 1);
+          const pos = Cesium.Cartesian3.lerp(a, b, t, new Cesium.Cartesian3());
+
+          viewer.entities.add({
+            id: `${idPrefix}${i}_${k}`,
+            position: pos,
+            billboard: {
+              image: ROUTE_ARROW_SVG,
+              scale: 0.13, // arrow size
+              rotation: rot,
+              alignedAxis: Cesium.Cartesian3.UNIT_Z,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+          });
+        }
+      }
+    }
+
+    /* ---------- DRAW ROUTE (omitted for brevity, assume working) ---------- */
+    function drawRoute(pathA, pathB) {
+      removeRouteEntitiesAndArrows();
+
+      const styledPolyline = (positions) => ({
+        positions,
+        width: 12,
+        material: new Cesium.PolylineOutlineMaterialProperty({
+          color: ROUTE_COLOR,
+          outlineColor: ROUTE_OUTLINE,
+          outlineWidth: 2
+        })
+      });
+
+      // Floor A path (start floor)
+      if (pathA && pathA.length > 0) {
+        viewer.entities.add({
+          id: "navigationLineA",
+          polyline: styledPolyline(pathA)
+        });
+        addRouteArrows(pathA, "routeArrowA_", 6);
+      }
+
+      // Floor B path (destination floor)
+      if (pathB && pathB.length > 0) {
+        viewer.entities.add({
+          id: "navigationLineB",
+          polyline: styledPolyline(pathB)
+        });
+        addRouteArrows(pathB, "routeArrowB_", 6);
+
+        // connector (stairs/elevator) between floors
+        if (pathA && pathA.length > 0) {
+          const lastA = pathA[pathA.length - 1];
+          const firstB = pathB[0];
+
+          viewer.entities.add({
+            id: "stairsLine",
+            polyline: {
+              positions: [lastA, firstB],
+              width: 10,
+              material: new Cesium.PolylineDashMaterialProperty({
+                color: ROUTE_COLOR,
+                dashLength: 18
+              })
+            }
+          });
+
+          addRouteArrows([lastA, firstB], "routeArrowS_", 4);
+        }
+      }
+    }
+
+/* ============================================================
+   UPDATED 3D STAIR BRIDGE DATA (Refined from new table)
+   1-2-3 (Floor) | 3-4 (Incline) | 4-5 (Landing) | 5-6 (Incline)
+   ============================================================ */
+
+const CUSTOM_STAIR_PATH = [
+  { lon: 77.13369487589452, lat: 28.67089514560174, id: "1" }, // Start floor
+  { lon: 77.13369762958561, lat: 28.670896829794504, id: "2" }, // Floor
+  { lon: 77.13370575798822, lat: 28.670902046216586, id: "3" }, // End of floor
+
+  { lon: 77.13368821772951, lat: 28.670936267563533, id: "4" }, // End of 1st incline
+  { lon: 77.13368355420981, lat: 28.67093314152187,  id: "5" }, // Landing
+  { lon: 77.13369675630433, lat: 28.670908889590613, id: "6" }  // End of 2nd incline
+];
+
+
+
+    async function startNavigation() {
+      clearDebugEntities();
+
+      // 1. Load Corridor and Door Data
+      if (!centerlineGraph2) centerlineGraph2 = await loadCenterlineGeoJSON('2nd_floor_corridor.geojson', ALT_2ND, 3);
+      if (!centerlineGraph3) centerlineGraph3 = await loadCenterlineGeoJSON('3rd_floor_corridor.geojson', ALT_3RD, 4);
+
+      doorPositions.clear();
+      await loadDoorGeoJSON('door_2nd.geojson', DOOR_2ND_GEOJSON_CONTENT, ALT_2ND, 3);
+      await loadDoorGeoJSON('door_3rd.geojson', DOOR_3RD_GEOJSON_CONTENT, ALT_3RD, 4);
+
+      const fromName = document.getElementById("fromRoom").value;
+      const toName = document.getElementById("toRoom").value;
+
+      const fromFloor = geo2.entities.values.some(e => e.properties?.room_name?.getValue() === fromName) ? 3 : 4;
+      const toFloor = geo2.entities.values.some(e => e.properties?.room_name?.getValue() === toName) ? 3 : 4;
+
+      const graphA = (fromFloor === 3 ? centerlineGraph2 : centerlineGraph3);
+      const graphB = (toFloor === 3 ? centerlineGraph2 : centerlineGraph3);
+
+      const startDoorPosition = getDoorPosition(fromName, fromFloor);
+      const endDoorPosition = getDoorPosition(toName, toFloor);
+
+      if (!startDoorPosition || !endDoorPosition) return;
+
+      const Z_LIFT = 0.5;
+      let pathFloorA = [];
+      let pathFloorB = [];
+
+      if (fromFloor === toFloor) {
+        /* SAME FLOOR PATHING */
+        const p = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, endDoorPosition));
+        if (!p) return;
+        pathFloorA = [startDoorPosition, ...p, endDoorPosition].map(pos =>
+          Cesium.Cartesian3.add(pos, new Cesium.Cartesian3(0, 0, Z_LIFT), new Cesium.Cartesian3())
+        );
+      } else {
+        /* DIFFERENT FLOOR PATHING (RED LINE INCLINE LOGIC) */
+        const startAlt = (fromFloor === 3) ? ALT_2ND : ALT_3RD;
+        const targetAlt = (fromFloor === 3) ? ALT_3RD : ALT_2ND;
+        const landingAlt = (startAlt + targetAlt) / 2;
+
+        // Path direction based on travel
+        let bridge = (fromFloor === 3) ? [...CUSTOM_STAIR_PATH] : [...CUSTOM_STAIR_PATH].reverse();
+
+        const stairPath3D = bridge.map((pt, index) => {
+          let h;
+          if (fromFloor === 3) { // UPWARD
+            if (index <= 2) h = startAlt;       // 1, 2, 3: Flat Start Floor
+            else if (index <= 4) h = landingAlt; // 4, 5: Flat Landing
+            else h = targetAlt;                 // 6, 7: Flat Target Floor
+          } else { // DOWNWARD
+            if (index <= 1) h = startAlt;       // 7, 6: Flat Start Floor
+            else if (index <= 3) h = landingAlt; // 5, 4: Flat Landing
+            else h = targetAlt;                 // 3, 2, 1: Flat Target Floor
+          }
+          return Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat, h + Z_LIFT);
+        });
+
+        // Generate Corridor Connections
+        const part1 = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, stairPath3D[0]));
+        const part2 = findPath(graphB, nearest(graphB, stairPath3D[stairPath3D.length - 1]), nearest(graphB, endDoorPosition));
+
+        if (!part1 || !part2) return;
+
+        // Final Path Assembly
+        pathFloorA = [startDoorPosition, ...part1].map(pos =>
+          Cesium.Cartesian3.add(pos, new Cesium.Cartesian3(0, 0, Z_LIFT), new Cesium.Cartesian3())
+        );
+        pathFloorA.push(stairPath3D[0]);
+
+        const liftedHallwayB = [...part2, endDoorPosition].map(pos =>
+          Cesium.Cartesian3.add(pos, new Cesium.Cartesian3(0, 0, Z_LIFT), new Cesium.Cartesian3())
+        );
+
+        pathFloorB = [...stairPath3D, ...liftedHallwayB];
+      }
+
+
+      
+      // Execution
+      drawRoute(pathFloorA, pathFloorB);
+
+      // ----------------------
+// ADD REAL START/END MARKERS
+// ----------------------
+const MARKER_LIFT = 1.2;   // same height as room labels
+
+let startMarkerPos = Cesium.Cartesian3.add(
+    startDoorPosition,
+    new Cesium.Cartesian3(0, 0, MARKER_LIFT),
+    new Cesium.Cartesian3()
+);
+
+let endMarkerPos = Cesium.Cartesian3.add(
+    endDoorPosition,
+    new Cesium.Cartesian3(0, 0, MARKER_LIFT),
+    new Cesium.Cartesian3()
+);
+
+addStartMarker(startMarkerPos);
+addEndMarker(endMarkerPos);
+
+      animationState.pathA = pathFloorA;
+      animationState.pathB = pathFloorB;
+      //initializeAnimation();
+      //toggleAnimation();
+    }
+
+
+    // Build navigation steps for UI
+const steps = {
+    fromName,
+    toName,
+    totalDistance: Math.round((pathFloorA.length + pathFloorB.length) * 5),
+    totalTime: Math.max(1, Math.round((pathFloorA.length + pathFloorB.length) / 4)),
+    list: [
+        { icon: "🚶", title: "Go to corridor", primary: "Walk straight 10–20 m" },
+        ...(fromFloor !== toFloor ? [{
+            icon: "↗️",
+            title: "Use Stairs",
+            primary: `Move to floor ${toFloor - 2}`
+        }] : []),
+        { icon: "🏁", title: "Arrive at destination", text: "Follow highlighted route" }
+    ]
+};
+
+updateNavigationUI(steps);
+
+
+    /* ============================================================
+        POPULATE DROPDOWNS WHEN GEOJSON LOADED (omitted for brevity, assume working)
+        ============================================================ */
+    function populateRoomDropdowns() {
+      if (!geo2 || !geo3) return;
+
+      const names = [
+        ...geo2.entities.values,
+        ...geo3.entities.values
+      ]
+        .filter(e => {
+          const name = e.properties?.room_name?.getValue();
+          // Filter out the corridor and stairs which are not valid navigation start/end points
+          return name && name !== "Employee sitting places" && name !== "Stairs";
+        })
+        .map(e => e.properties.room_name.getValue());
+
+      const unique = [...new Set(names)].sort();
+
+      document.getElementById("fromRoom").innerHTML =
+        unique.map(n => `<option>${n}</option>`).join("");
+
+      document.getElementById("toRoom").innerHTML =
+        unique.map(n => `<option>${n}</option>`).join("");
+    }
+
+    loadGeoFiles.then(populateRoomDropdowns);
+
+    window.startNavigation = startNavigation;
+
+    /* ============================================================
+        ANIMATION SYSTEM FOR PATH NAVIGATION
+        ============================================================ */
+
+    let animationState = {
+      isRunning: false,
+      isPaused: false,
+      markerEntity: null,
+      positionProperty: null,
+      cameraFollowMode: true,
+      pathA: [],
+      pathB: [],
+      startTime: null,
+      pauseTime: null,
+      totalDuration: 0,
+      animationSpeed: 0.1
+    };
+
+    /**
+     * Create a SampledPositionProperty from a path array
+     * @param {Array<Cesium.Cartesian3>} pathPositions - Array of world positions
+     * @param {number} durationSeconds - Total duration for animation
+     * @returns {Cesium.SampledPositionProperty}
+     */
+    function createSampledPositionProperty(pathPositions, durationSeconds) {
+      const positionProperty = new Cesium.SampledPositionProperty();
+      positionProperty.setInterpolationOptions({
+        interpolationDegree: 3,
+        interpolationAlgorithm: Cesium.LagrangePolynomialApproximation
+      });
+
+      if (!pathPositions || pathPositions.length === 0) {
+        console.error("Path positions is empty!");
+        return positionProperty;
+      }
+
+      // Calculate time step for each segment
+      const timeStep = durationSeconds / (pathPositions.length - 1);
+
+      pathPositions.forEach((position, index) => {
+        const time = Cesium.JulianDate.addSeconds(
+          animationState.startTime,
+          index * timeStep,
+          new Cesium.JulianDate()
+        );
+        positionProperty.addSample(time, position);
+      });
+
+      return positionProperty;
+    }
+
+    /**
+     * Create a marker entity that follows the path
+     * @param {Cesium.SampledPositionProperty} positionProperty
+     */
+    function createMarkerEntity(positionProperty) {
+      if (animationState.markerEntity) {
+        viewer.entities.remove(animationState.markerEntity);
+      }
+
+      animationState.markerEntity = viewer.entities.add({
+        id: "navigationMarker",
+        position: positionProperty,
+
+        // Walking GLB model (same folder)
+        model: {
+          uri: "walking_person.glb",
+          scale: 0.7,
+          minimumPixelSize: 32,
+          runAnimations: true
+        },
+
+        // Fallback dot in case model fails
+        point: {
+          pixelSize: 5,
+          color: Cesium.Color.RED,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2
+        },
+
+        orientation: new Cesium.VelocityOrientationProperty(positionProperty)
+      });
+
+      return animationState.markerEntity;
+    }
+
+    function addStartMarker(position) {
+    viewer.entities.removeById("startMarker");
+
+    viewer.entities.add({
+        id: "startMarker",
+        position: position,
+        billboard: {
+            image: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // red pin icon
+            scale: 0.15,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        },
+        label: {
+            text: "START",
+            font: "14px bold sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            pixelOffset: new Cesium.Cartesian2(0, -30),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+    });
+}
+
+function addEndMarker(position) {
+    viewer.entities.removeById("endMarker");
+
+    viewer.entities.add({
+        id: "endMarker",
+        position: position,
+        billboard: {
+            image: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+            color: Cesium.Color.BLUE,
+            scale: 0.15,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        },
+        label: {
+            text: "END",
+            font: "14px bold sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            pixelOffset: new Cesium.Cartesian2(0, -30),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+    });
+}
+
+
+    /**
+     * Combine two paths (two floors) with altitude transitions
+     * @param {Array<Cesium.Cartesian3>} pathFloorA - Path on starting floor
+     * @param {Array<Cesium.Cartesian3>} pathFloorB - Path on destination floor
+     * @returns {Array<Cesium.Cartesian3>} Combined path
+     */
+    function combinePaths(pathFloorA, pathFloorB) {
+      if (!pathFloorB || pathFloorB.length === 0) {
+        return pathFloorA;
+      }
+
+      // Remove the last point of pathA (stairs entry) and combine with pathB
+      const combinedPath = [];
+
+      if (pathFloorA && pathFloorA.length > 0) {
+        combinedPath.push(...pathFloorA.slice(0, -1)); // Exclude last point
+      }
+
+      if (pathFloorB && pathFloorB.length > 0) {
+        combinedPath.push(...pathFloorB); // Include all of pathB
+      }
+
+      return combinedPath;
+    }
+
+    /**
+     * Initialize animation with combined path
+     */
+    function initializeAnimation() {
+      const combinedPath = combinePaths(animationState.pathA, animationState.pathB);
+
+      if (!combinedPath || combinedPath.length < 2) {
+        alert("Path is empty! Please generate a navigation route first.");
+        return;
+      }
+
+      // Calculate duration based on path length (adjust SPEED_FACTOR as needed)
+      const SPEED_FACTOR = 50; // Meters per second
+      let totalDistance = 0;
+
+      for (let i = 1; i < combinedPath.length; i++) {
+        totalDistance += Cesium.Cartesian3.distance(combinedPath[i - 1], combinedPath[i]);
+      }
+
+      // Duration in seconds
+      animationState.totalDuration = Math.max(totalDistance / SPEED_FACTOR, 1);
+
+      // Set start time to current simulation time
+      animationState.startTime = viewer.clock.currentTime.clone();
+
+      // Create sampled position property
+      animationState.positionProperty = createSampledPositionProperty(
+        combinedPath,
+        animationState.totalDuration
+      );
+
+      // Create marker
+      createMarkerEntity(animationState.positionProperty);
+
+      // Show animation panel
+      // animation panel disabled
+
+
+      // Reset button states
+      animationState.isRunning = true;
+      animationState.isPaused = false;
+      updateButtonStates();
+      // Ensure clock multiplier matches current speed setting
+      updateAnimationSpeed();
+    }
+
+    /**
+     * Start or resume animation
+     */
+    function toggleAnimation() {
+      if (animationState.isPaused) {
+        // Resume from pause
+        const pausedDelta = Cesium.JulianDate.secondsDifference(
+          Cesium.JulianDate.now(),
+          animationState.pauseTime
+        );
+
+        animationState.startTime = Cesium.JulianDate.addSeconds(
+          animationState.startTime,
+          pausedDelta,
+          new Cesium.JulianDate()
+        );
+
+        animationState.isPaused = false;
+      }
+
+      viewer.clock.shouldAnimate = true;
+      animationState.isRunning = true;
+      updateButtonStates();
+    }
+
+    /**
+     * Pause animation
+     */
+    function pauseAnimation() {
+      viewer.clock.shouldAnimate = false;
+      animationState.isPaused = true;
+      animationState.pauseTime = Cesium.JulianDate.now();
+      updateButtonStates();
+    }
+
+    /**
+     * Reset animation to start
+     */
+    function resetAnimation() {
+      // Pause first
+      pauseAnimation();
+
+      // Reset start time to now
+      animationState.startTime = viewer.clock.currentTime.clone();
+
+      // Rebuild the sampled position property so sample times align with the new start time
+      const combinedPath = combinePaths(animationState.pathA, animationState.pathB);
+      if (combinedPath && combinedPath.length >= 2) {
+        animationState.positionProperty = createSampledPositionProperty(
+          combinedPath,
+          animationState.totalDuration
+        );
+        createMarkerEntity(animationState.positionProperty);
+      }
+
+      // Keep animation paused until user presses Play
+      animationState.isPaused = true;
+      animationState.isRunning = false;
+      updateButtonStates();
+    }
+
+    /**
+     * Update animation speed
+     */
+    function updateAnimationSpeed() {
+      const speedValue = parseFloat(document.getElementById("speedSlider").value);
+      animationState.animationSpeed = speedValue;
+      document.getElementById("speedLabel").textContent = speedValue.toFixed(1) + "x";
+
+      // Adjust clock multiplier for speed control
+      viewer.clock.multiplier = speedValue;
+    }
+
+    /**
+     * Update button states based on animation state
+     */
+    function updateButtonStates() {
+      const playBtn = document.getElementById("playBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+
+      if (animationState.isRunning && !animationState.isPaused) {
+        playBtn.style.display = "none";
+        pauseBtn.style.display = "block";
+      } else {
+        playBtn.style.display = "block";
+        pauseBtn.style.display = "none";
+      }
+    }
+
+    /**
+     * Update camera to follow marker
+     */
+    function updateCameraFollow() {
+      if (!animationState.markerEntity) return;
+      const pos = animationState.markerEntity.position.getValue(viewer.clock.currentTime);
+      if (!pos) return;
+
+      viewer.camera.viewBoundingSphere(
+        new Cesium.BoundingSphere(pos, 2),
+        new Cesium.HeadingPitchRange(
+          viewer.camera.heading,           // Allows you to rotate the view manually
+          Cesium.Math.toRadians(-90),      // Straight down
+          25.0                             // High enough to see the floor plan
+        )
+      );
+    }
+
+    // Listen to checkbox changes
+    document.getElementById("cameraFollow").addEventListener("change", (e) => {
+      animationState.cameraFollowMode = e.target.checked;
+    });
+
+    document.getElementById("showPath").addEventListener("change", (e) => {
+      const showPath = e.target.checked;
+
+      const lineA = viewer.entities.getById("navigationLineA");
+      const lineB = viewer.entities.getById("navigationLineB");
+      const stairsLine = viewer.entities.getById("stairsLine");
+
+      if (lineA) lineA.show = showPath;
+      if (lineB) lineB.show = showPath;
+      if (stairsLine) stairsLine.show = showPath;
+
+      // ✅ also hide/show arrows
+      viewer.entities.values.forEach(ent => {
+        if (!ent.id) return;
+        if (ent.id.startsWith("routeArrowA_") || ent.id.startsWith("routeArrowB_") || ent.id.startsWith("routeArrowS_")) {
+          ent.show = showPath;
+        }
+      });
+    });
+
+
+    // Update camera follow in render loop
+    // Real-time speed slider update
+    const speedSlider = document.getElementById("speedSlider");
+    if (speedSlider) {
+      speedSlider.addEventListener("input", updateAnimationSpeed);
+    }
+    viewer.scene.preRender.addEventListener(() => {
+      if (animationState.isRunning && !animationState.isPaused) {
+        // Update camera follow
+        if (animationState.cameraFollowMode) {
+          updateCameraFollow();
+        }
+
+        // Check if animation has completed
+        const currentTime = viewer.clock.currentTime;
+        const animationEndTime = Cesium.JulianDate.addSeconds(
+          animationState.startTime,
+          animationState.totalDuration,
+          new Cesium.JulianDate()
+        );
+
+        if (Cesium.JulianDate.compare(currentTime, animationEndTime) > 0) {
+          // Animation completed - loop it
+          animationState.startTime = viewer.clock.currentTime.clone();
+          if (animationState.positionProperty) {
+            const combinedPath = combinePaths(animationState.pathA, animationState.pathB);
+            animationState.positionProperty = createSampledPositionProperty(
+              combinedPath,
+              animationState.totalDuration
+            );
+            createMarkerEntity(animationState.positionProperty);
+          }
+        }
+      }
+    });
+
+    function updateRoomAvailability(events) {
+  const bookingMap = buildRoomBookingMap(events);
+
+  viewer.dataSources._dataSources.forEach(ds => {
+    ds.entities.values.forEach(entity => {
+      if (!entity.polygon) return;
+
+      const geoRoomName = entity.properties?.room_name?.getValue();
+      if (!geoRoomName) return;
+
+      const normalizedGeoName = normalizeRoomName(geoRoomName);
+      if (!BOOKABLE_ROOMS.has(normalizedGeoName)) return;
+
+      const roomEvents = bookingMap[normalizedGeoName] || [];
+
+      // ✅ ONLY keep ongoing or future bookings
+      const now = new Date();
+
+const activeBookings = roomEvents.filter(b =>
+  b.end >= now
+);
+
+
+      if (activeBookings.length > 0) {
+        // 🔴 BOOKED
+        entity.polygon.material = Cesium.Color.RED.withAlpha(0.6);
+        entity.description = createTooltipHTML(geoRoomName, activeBookings);
+      } else {
+        // 🟢 AVAILABLE
+        entity.polygon.material = Cesium.Color.GREEN.withAlpha(0.4);
+        entity.description = createTooltipHTML(geoRoomName, []);
+      }
+    });
+  });
+}
+
+
+function updateNavigationUI(steps) {
+    document.getElementById("fromNameDisplay").innerText = steps.fromName;
+    document.getElementById("toNameDisplay").innerText = steps.toName;
+
+    const navSummary = document.getElementById("navSummary");
+    const navSteps = document.getElementById("navSteps");
+
+    navSummary.innerHTML = `🚶 ${steps.totalDistance} m &nbsp; ⏱ ${steps.totalTime} min`;
+
+    navSteps.innerHTML = steps.list.map(step => `
+        <div class="nav-step">
+            <div class="step-icon">${step.icon}</div>
+            <div class="step-details">
+                <div class="step-title">${step.title}</div>
+                ${
+                    step.primary
+                    ? `<div class="step-box">${step.primary}</div>`
+                    : `<div class="step-text">${step.text}</div>`
+                }
+            </div>
+        </div>
+    `).join("");
+}
+
+
+
+    viewer.screenSpaceEventHandler.setInputAction(movement => {
+      const picked = viewer.scene.pick(movement.endPosition);
+
+      if (!picked || !picked.id || !picked.id.polygon) {
+        tooltip.style.display = "none";
+        return;
+      }
+
+      // Only show simple hover tooltip (no popup)
+      let html = picked.id.description;
+
+      if (html && typeof html === 'object' && html.getValue) {
+        html = html.getValue(viewer.clock.currentTime);
+      }
+
+      if (!html) {
+        tooltip.style.display = "none";
+        return;
+      }
+
+      tooltip.innerHTML = html;
+      tooltip.style.left = movement.endPosition.x + 15 + "px";
+      tooltip.style.top = movement.endPosition.y + 15 + "px";
+      tooltip.style.display = "block";
+
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Make functions global
+    window.toggleAnimation = toggleAnimation;
+    window.pauseAnimation = pauseAnimation;
+    window.resetAnimation = resetAnimation;
+    window.updateAnimationSpeed = updateAnimationSpeed;
+
+
+
+  </script>
+
+</body>
+
+</html>
+
