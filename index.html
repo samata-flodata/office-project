@@ -779,7 +779,7 @@ viewer.scene.ambientLightColor =
     async function loadModels() {
 // Full model
       modelFullBuilding = await Cesium.Model.fromGltfAsync({
-  url: "full_building.glb",
+  url: "full_building_opt.glb",
   modelMatrix: computeMatrix(BASE_ALT),
   scale: MODEL_SCALE,
   shadows: Cesium.ShadowMode.DISABLED
@@ -791,7 +791,7 @@ modelFullBuilding.show = false;
 
       // Ground floor (model only)
       modelGround = await Cesium.Model.fromGltfAsync({
-        url: "1st_floor.glb",
+        url: "1st_floor_opt.glb",
         modelMatrix: computeMatrix(ALT_GROUND),
         scale: MODEL_SCALE,
         shadows: Cesium.ShadowMode.DISABLED
@@ -799,14 +799,14 @@ modelFullBuilding.show = false;
 
       // 1st floor up (model only)
       model1 = await Cesium.Model.fromGltfAsync({
-        url: "1st_floor_up.glb",
+        url: "1st_floor_up_opt.glb",
         modelMatrix: computeMatrix(ALT_1ST),
         scale: MODEL_SCALE
       });
 
       // 2nd floor (office)
       model2 = await Cesium.Model.fromGltfAsync({
-        url: "stairs_small.glb",
+        url: "stairs_final2.glb",
         modelMatrix: computeMatrix(ALT_2ND),
         scale: MODEL_SCALE,
         shadows: Cesium.ShadowMode.DISABLED
@@ -815,7 +815,7 @@ modelFullBuilding.show = false;
 
       // 3rd floor (office)
       model3 = await Cesium.Model.fromGltfAsync({
-        url: "3rdfloor_small.glb",
+        url: "3rdfloor_ultra.glb",
         modelMatrix: computeMatrix(ALT_3RD),
         scale: MODEL_SCALE,
         shadows: Cesium.ShadowMode.DISABLED
